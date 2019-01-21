@@ -212,7 +212,7 @@ describe Chef::Artifact do
 
   describe ":get_s3_object" do
     require 'aws-sdk'
-    AWS.stub!
+    Aws.stub
     subject { get_s3_object }
     let(:mock_s3_client) { mock('mock_s3_client') }
     let(:mock_s3_bucket) { mock('my-bucket') }
@@ -225,7 +225,7 @@ describe Chef::Artifact do
       it "loads file normally" do
         stub_buckets_list.stub(:[]).with('my-bucket').and_return(mock_s3_bucket)
         stub_objects_list.stub(:[]).with('my-file.tar.gz').and_return(mock_s3_object)
-        AWS::S3.should_receive(:new).with(no_args()).and_return(mock_s3_client)
+        Aws::S3::Client.should_receive(:new).with(no_args()).and_return(mock_s3_client)
         mock_s3_client.should_receive(:buckets).and_return(stub_buckets_list)
         mock_s3_bucket.should_receive(:objects).and_return(stub_objects_list)
         mock_s3_bucket.should_receive(:exists?).and_return(true)

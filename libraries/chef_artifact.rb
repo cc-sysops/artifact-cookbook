@@ -87,33 +87,31 @@ class Chef
       # @param  source_file [String] a s3 url that represents the artifact in the form: s3://<endpoint>/<bucket>/<object-path>
       # @param  destination_file [String] a path to download the artifact to
       #
-      def retrieve_from_s3(node, source_file, destination_file)
-        begin
-          require 'aws-sdk'
-          config = data_bag_config_for(node.chef_environment, DATA_BAG_AWS)
-          s3_endpoint, bucket_name, object_name = parse_s3_url(source_file)
+      def retrieve_from_s3(node, source_file, destination_file, region='us-east-1')
+        require 'aws-sdk'
+        config = data_bag_config_for(node.chef_environment, DATA_BAG_AWS)
+        s3_endpoint, bucket_name, object_name = parse_s3_url(source_file)
 
-          if config.empty?
-            AWS.config(:s3 => { :endpoint => s3_endpoint })
-          else
-            AWS.config(:access_key_id => config['access_key_id'],
-                       :secret_access_key => config['secret_access_key'],
-                       :s3 => { :endpoint => s3_endpoint })
-          end
-
-          object = get_s3_object(bucket_name, object_name)
-
-          Chef::Log.debug("Downloading #{object_name} from S3 bucket #{bucket_name}")
-          ::File.open(destination_file, 'wb') do |file|
-            object.read do |chunk|
-              file.write(chunk)
-            end
-            Chef::Log.debug("File #{destination_file} is #{file.size} bytes on disk")
-          end
-        rescue URI::InvalidURIError
-          Chef::Log.warn("Expected an S3 URL but found #{source_file}")
-          raise
+        Aws.config[:s3] = { force_path_style: true, region: region } 
+        unless config.empty?
+          Aws.config[:credentials] = Aws::Credentials.new(
+            config['access_key_id'], config['secret_access_key'])
         end
+
+        Chef::Log.debug("Downloading #{object_name} from S3 bucket #{bucket_name}")
+        s3 = Aws::S3::Client.new
+        # Validate existance of object.
+        s3.head_bucket(bucket: bucket_name); s3.head_object(bucket: bucket_name, key: object_name)
+        ::File.open(destination_file, 'wb') do |file|
+          s3.get_object(bucket: bucket_name, key: object_name) do |chunk|
+            file.write(chunk)
+          end
+          Chef::Log.debug("File #{destination_file} is #{file.size} bytes on disk")
+        end
+      rescue Aws::S3::Errors::Http301Error
+        raise S3BucketNotFoundError.new(bucket_name)
+      rescue Aws::S3::Errors::NotFound
+        raise S3ArtifactNotFoundError.new(bucket_name, object_name)
       end
 
       # Parse a source url to retrieve the specific parts required to interact with the object on S3.
@@ -132,6 +130,8 @@ class Chef
         [s3_endpoint, bucket_name, object_name]
       end
 
+
+      # @Deprecated
       # Given a bucket and object name - fetches the object from S3
       #
       # @example
@@ -141,15 +141,15 @@ class Chef
       # @param  object_name [String] Name of the S3 object
       #
       # @return [AWS::S3::S3Object] An S3 Object
-      def get_s3_object(bucket_name, object_name)
-        s3_client = AWS::S3.new()
-        bucket = s3_client.buckets[bucket_name]
-        raise S3BucketNotFoundError.new(bucket_name) unless bucket.exists?
+      # def get_s3_object(bucket_name, object_name)
+      #   s3_client = AWS::S3.new()
+      #   bucket = s3_client.buckets[bucket_name]
+      #   raise S3BucketNotFoundError.new(bucket_name) unless bucket.exists?
 
-        object = bucket.objects[object_name]
-        raise S3ArtifactNotFoundError.new(bucket_name, object_name) unless object.exists?
-        object
-      end
+      #   object = bucket.objects[object_name]
+      #   raise S3ArtifactNotFoundError.new(bucket_name, object_name) unless object.exists?
+      #   object
+      # end
 
       # Returns true when the artifact is believed to be from a
       # Nexus source.

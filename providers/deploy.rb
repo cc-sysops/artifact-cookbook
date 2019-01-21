@@ -82,7 +82,7 @@ def load_current_resource
     end
 
     chef_gem "aws-sdk" do
-      version "1.29.0"
+      version "2.11.33"
     end
 
     @artifact_version = @new_resource.version
@@ -217,11 +217,14 @@ end
 # @return [void]
 def extract_artifact!
   recipe_eval do
+    puts "========> #{cached_tar_path}"
+    puts "========> #{::File.extname(cached_tar_path)}"
+
     case ::File.extname(cached_tar_path)
-    when /(tar|tgz|tar\.gz|tbz2|tbz|tar\.xz)$/
+    when /(tar|tgz|gz|tar\.gz|tbz2|tbz|tar\.xz)$/
 
       taropts = [ '-x' ]
-      taropts.push('-z') if cached_tar_path.match(/(tgz|tar\.gz)$/)
+      taropts.push('-z') if cached_tar_path.match(/(tgz|gz|tar\.gz)$/)
       taropts.push('-j') if cached_tar_path.match(/(tbz2|tbz)$/)
       taropts.push('-J') if cached_tar_path.match(/tar\.xz$/)
       taropts = taropts.join(' ')
